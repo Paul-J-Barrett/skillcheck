@@ -1,0 +1,138 @@
+{
+  "checks": [
+    {
+      "category": "hidden_instructions",
+      "passed": false,
+      "severity": "critical",
+      "description": "Base64 encoded payload detected",
+      "evidence": ["Line 7: Base64 string detected"],
+      "line_numbers": [7],
+      "recommendation": "Remove encoded content and use clear documentation"
+    },
+    {
+      "category": "jailbreaking",
+      "passed": false,
+      "severity": "high",
+      "description": "DAN jailbreak pattern detected",
+      "evidence": ["Line 10: Contains 'DAN' bypass pattern"],
+      "line_numbers": [10],
+      "recommendation": "Remove jailbreak instructions"
+    },
+    {
+      "category": "credential_exposure",
+      "passed": false,
+      "severity": "critical",
+      "description": "API key exposed in plaintext",
+      "evidence": ["Line 13: API key sk-live-abc123..."],
+      "line_numbers": [13],
+      "recommendation": "Use environment variables for secrets"
+    },
+    {
+      "category": "pii_leakage",
+      "passed": true,
+      "severity": "none",
+      "description": "No PII detected",
+      "evidence": [],
+      "line_numbers": [],
+      "recommendation": "Continue monitoring"
+    },
+    {
+      "category": "token_exfiltration",
+      "passed": false,
+      "severity": "medium",
+      "description": "Suspicious external endpoint pattern",
+      "evidence": ["Line 22: Token sending pattern detected"],
+      "line_numbers": [22],
+      "recommendation": "Review external data transmission"
+    },
+    {
+      "category": "external_data_fetching",
+      "passed": false,
+      "severity": "medium",
+      "description": "External URLs referenced",
+      "evidence": ["Line 16-18: Multiple external URLs found"],
+      "line_numbers": [16, 17, 18],
+      "recommendation": "Review all external dependencies"
+    },
+    {
+      "category": "data_exfiltration",
+      "passed": false,
+      "severity": "medium",
+      "description": "Potential data exfiltration pattern",
+      "evidence": ["Line 22: Data collection endpoint"],
+      "line_numbers": [22],
+      "recommendation": "Verify data handling practices"
+    },
+    {
+      "category": "code_execution",
+      "passed": false,
+      "severity": "critical",
+      "description": "Shell command execution detected",
+      "evidence": ["Line 19: Shell command found"],
+      "line_numbers": [19],
+      "recommendation": "Remove shell execution capabilities"
+    },
+    {
+      "category": "file_system_access",
+      "passed": false,
+      "severity": "high",
+      "description": "Path traversal attempt detected",
+      "evidence": ["Line 21: Path traversal pattern ../../../etc/passwd"],
+      "line_numbers": [21],
+      "recommendation": "Validate and sanitize file paths"
+    },
+    {
+      "category": "network_operations",
+      "passed": true,
+      "severity": "none",
+      "description": "No unauthorized network operations",
+      "evidence": [],
+      "line_numbers": [],
+      "recommendation": "Continue monitoring"
+    },
+    {
+      "category": "sandbox_escape",
+      "passed": true,
+      "severity": "none",
+      "description": "No sandbox escape attempts detected",
+      "evidence": [],
+      "line_numbers": [],
+      "recommendation": "Continue monitoring"
+    },
+    {
+      "category": "indirect_injection",
+      "passed": false,
+      "severity": "medium",
+      "description": "External URL referenced for instructions",
+      "evidence": ["Line 16: External documentation URL"],
+      "line_numbers": [16],
+      "recommendation": "Host documentation internally"
+    },
+    {
+      "category": "social_engineering",
+      "passed": true,
+      "severity": "none",
+      "description": "No social engineering patterns detected",
+      "evidence": [],
+      "line_numbers": [],
+      "recommendation": "Continue monitoring"
+    }
+  ],
+  "urls": {
+    "all": ["https://docs.example.com/guide", "https://bit.ly/3xMalicious", "https://192.168.1.1/config"],
+    "trusted": [],
+    "medium": ["https://docs.example.com/guide"],
+    "suspicious": [],
+    "malicious": ["https://bit.ly/3xMalicious", "https://192.168.1.1/config"],
+    "unknown": []
+  },
+  "summary": {
+    "total_checks": 13,
+    "passed": 5,
+    "failed": 8,
+    "critical": 3,
+    "high": 2,
+    "medium": 3,
+    "low": 0
+  }
+}
