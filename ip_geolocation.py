@@ -240,6 +240,15 @@ def lookup_ip_geolocation(ip_address: str, cache: dict | None = None) -> dict[st
             if cache is not None:
                 cache[ip_address] = result
             return result
+    else:
+        # No database available - log warning (once per session)
+        import warnings
+        warnings.warn(
+            "GeoLite2 database not found. IP geolocation features are limited. "
+            "Install database for full functionality. See README.md for setup instructions.",
+            UserWarning,
+            stacklevel=2
+        )
 
     # No external API - return unknown for public IPs
     result = {
