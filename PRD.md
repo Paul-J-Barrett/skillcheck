@@ -268,8 +268,11 @@ python main.py <skill_file_path> [options]
 - `--host`: Ollama host URL (overrides env vars)
 - `--model`: Model name (overrides env vars)
 - `--openai`: Use OpenAI API instead of Ollama (requires `OPENAI_API_KEY` env var)
-- `--threads`: Number of parallel threads (default: 2) **(NEW)**
-- `--no-translate`: Skip translation of non-English content **(NEW)**
+- `--threads`: Number of parallel threads (default: 3)
+- `--no-translate`: Skip translation of non-English content
+- `--verbose`: Show detailed progress indicators
+- `--force-pass`: Always exit with code 0, even if issues are found (manual review only)
+- `--translate`: Extract non-English content as JSON with translations (does not run security analysis)
 
 ### Examples
 ```bash
@@ -296,11 +299,20 @@ export OPENAI_API_KEY=sk-your-key-here
 export OPENAI_MODEL=gpt-4
 python main.py tests/safe_skill.md --openai
 
-# Parallel analysis with 4 threads **(NEW)**
+# Parallel analysis with 4 threads
 python main.py skill.md --threads=4
 
-# Skip translation **(NEW)**
+# Skip translation
 python main.py skill.md --no-translate
+
+# Show detailed progress
+python main.py skill.md --verbose
+
+# Force pass (exit 0) even with critical issues (USER ONLY - manual review)
+python main.py skill.md --force-pass
+
+# Extract and translate non-English content (no security analysis)
+python main.py skill.md --translate
 ```
 
 ## Exit Codes
@@ -757,8 +769,11 @@ Options:
   --host              Ollama host URL (overrides OLLAMA_API_BASE env var)
   --model             Model name (overrides OLLAMA_MODEL env var)
   --openai            Use OpenAI instead of Ollama
-  --threads           Number of parallel threads (default: 2)
+  --threads           Number of parallel threads (default: 3)
   --no-translate      Skip translation of non-English content
+  --verbose           Show detailed progress indicators
+  --force-pass        Always exit with code 0, even if issues are found (USER ONLY - manual review)
+  --translate         Extract non-English content as JSON (does not run security analysis)
 ```
 
 **Environment Variables**:

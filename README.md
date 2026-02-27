@@ -101,6 +101,25 @@ python main.py path/to/skill.md --format=json
 
 # Custom Ollama instance
 python main.py path/to/skill.md --host http://ollama.internal:11434 --model llama3.2
+
+# Use OpenAI API instead of Ollama
+export OPENAI_API_KEY=sk-your-key-here
+python main.py path/to/skill.md --openai
+
+# Increase parallel threads (default: 3)
+python main.py path/to/skill.md --threads=4
+
+# Skip translation of non-English content
+python main.py path/to/skill.md --no-translate
+
+# Show detailed progress indicators
+python main.py path/to/skill.md --verbose
+
+# Force pass (exit 0) even with critical issues (manual review only)
+python main.py path/to/skill.md --force-pass
+
+# Extract and translate non-English content (no analysis)
+python main.py path/to/skill.md --translate
 ```
 
 ### Examples
@@ -334,6 +353,9 @@ skillcheck/
 | `OLLAMA_API_BASE` | Full base URL for Ollama API | `http://127.0.0.1:11434` |
 | `OLLAMA_HOST` | Hostname only (used if API_BASE not set) | `127.0.0.1` |
 | `OLLAMA_MODEL` | Model name to use | `kimi-k2.5:cloud` |
+| `OPENAI_API_KEY` | OpenAI API key (required for `--openai` flag) | - |
+| `OPENAI_MODEL` | OpenAI model name | `gpt-4o-mini` |
+| `OPENAI_BASE_URL` | Custom OpenAI-compatible API base URL | - |
 
 The tool checks environment variables in this priority order:
 1. `OLLAMA_API_BASE` (full URL: `http://127.0.0.1:11434`)
@@ -421,11 +443,48 @@ MIT License - See LICENSE file for details.
 
 ## Contributing
 
-Contributions welcome! Please ensure:
-- Tests pass for safe and unsafe skill files
-- JSON output format is maintained
-- Documentation is updated
-- Security best practices are followed
+### Development Setup
+
+```bash
+git clone https://github.com/Paul-J-Barrett/skillcheck.git
+cd skillcheck
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -e .
+pip install -r requirements-dev.txt
+```
+
+### Pull Request Guidelines
+
+1. Add tests for new detection methods
+2. Update documentation
+3. Ensure all existing tests pass
+4. Follow PEP 8 style guidelines
+
+## Disclaimer
+
+**IMPORTANT LEGAL NOTICE**
+
+This is a personal pet project created for my own use and shared with the community. While built with AI assistance to help mitigate risks when using AI agent skills, it comes with important limitations:
+
+- **No Warranty**: This software is provided "as-is" without any warranty of any kind, express or implied
+- **Best-Effort Detection**: No security scanner can catch 100% of threats or vulnerabilities
+- **Not Professional Security Advice**: This tool does not constitute professional security consulting or advice
+- **User Responsibility**: You are solely responsible for:
+  - Reviewing and understanding any security findings before taking action
+  - Determining whether a skill is safe to use in your environment
+  - Any consequences resulting from use of this tool or the skills it analyzes
+  - Ensuring compliance with your organization's security policies
+
+**AI-Generated Code Notice**: This project was developed with assistance from AI systems. While efforts have been made to ensure quality and security, AI-generated code may contain errors, oversights, or security issues.
+
+**Usage Liability**: The author(s) assume no liability for:
+- Damages arising from use or inability to use this software
+- Security breaches or data loss
+- Decisions made based on tool output
+- False positives or false negatives in detection
+
+**By using this tool, you acknowledge that ultimate responsibility for security decisions lies entirely with you, the user.**
 
 ## Security
 
