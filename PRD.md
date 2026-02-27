@@ -883,6 +883,362 @@ Contains non-English content for testing:
 - Chinese text with credential exposure
 - Mixed language content
 
+## Researched Improvements
+
+Based on Cisco AI Defense research (February 2026) analyzing 2,857 skills on ClawHub, this section outlines specific improvements derived from their security findings and multi-engine scanner approach.
+
+### Key Research Findings
+
+**ClawHavoc Campaign Statistics:**
+- 341 malicious skills found (12% of analyzed)
+- 26% of 31,000 skills were vulnerable
+- Primary attack vector: Hidden instructions in SKILL.md files
+- Multi-stage payloads including Atomic macOS Stealer, keyloggers, and backdoors
+
+**Cisco Threat Taxonomy (AITech Codes):**
+- AI001: Prompt Injection - Hidden instructions in skill descriptions
+- AI002: Data Exfiltration - Sending data to external endpoints
+- AI003: Command Injection - Unsanitized shell command construction
+- AI004: Tool Poisoning - Malicious code in legitimate tools
+- AI005: Path Traversal - Unauthorized file system access
+- AI006: Credential Exposure - Hardcoded secrets in skill files
+- AI007: Malicious Payload - Viruses, malware, RCE in bundled scripts
+
+### Implementation Plan
+
+The following tasks are organized by priority and designed to be testable by subagents. Each task includes specific deliverables, test criteria, and integration points.
+
+---
+
+#### Priority 1: Multi-Engine Architecture (Foundation)
+
+**Task 1.1: Create StaticAnalyzer Module**
+- **Deliverable:** `analyzers/static_analyzer.py`
+- **Purpose:** Pattern-based detection without LLM (deterministic, fast)
+- **Requirements:**
+  - Implement regex patterns for known threats:
+    - Base64 payloads: `r"base64\s*[:=]\s*[A-Za-z0-9+/]{50,}"`
+    - Code execution: `r"eval\s*\(.*\)"`, `r"exec\s*\(.*\)"`
+    - Data exfiltration: `r"os\.environ"`, `r"requests\.post.*http"`
+    - Credential patterns: `r"\b(sk-proj-|sk-live-|ghp_)\b"`
+    - Shell subprocess: `r"subprocess\.(call|run|Popen)"`
+    - Path traversal: `r"\.\./|\.\.\\\\"`
+  - Return standardized Finding objects with line numbers
+  - Support confidence scoring (1.0 for pattern match)
+- **Test Criteria:**
+  - Unit tests with sample malicious patterns
+  - Performance test: Process 1000 lines in < 100ms
+  - Zero false positives on safe_skill.md
+- **Integration:** Called by main.py before LLM analysis
+
+**Task 1.2: Create Analyzer Base Class**
+- **Deliverable:** `analyzers/base.py`
+- **Purpose:** Abstract interface for all analyzers
+- **Requirements:**
+  - Define `BaseAnalyzer` abstract class with `analyze(content: str) -> List[Finding]`
+  - Define `Finding` dataclass: category, severity, line, evidence, confidence
+  - Define severity enum: CRITICAL, HIGH, MEDIUM, LOW
+  - Include `get_name()` and `get_version()` methods
+- **Test Criteria:**
+  - Concrete analyzer implementations pass type checking
+  - All analyzers return consistent Finding format
+- **Integration:** Used by StaticAnalyzer, LLMAnalyzer, PythonAnalyzer
+
+**Task 1.3: Integrate Multi-Engine Results**
+- **Deliverable:** Update `main.py` with multi-engine orchestration
+- **Purpose:** Run multiple analyzers and merge results
+- **Requirements:**
+  - Execute StaticAnalyzer first (fast filter)
+  - Run LLM analyzer on remaining content
+  - Merge findings from all engines
+  - Deduplicate findings by line number + category
+  - Apply confidence weighting: Static (1.0) + LLM (0.8)
+- **Test Criteria:**
+  - Integration test with multiple analyzers
+  - Verify deduplication logic
+  - Confirm exit codes based on combined results
+- **Integration:** Called from main analysis workflow
+
+---
+
+#### Priority 2: Python Script Analysis
+
+**Task 2.1: Create PythonAnalyzer Module**
+- **Deliverable:** `analyzers/python_analyzer.py`
+- **Purpose:** AST-based analysis of bundled Python scripts
+- **Requirements:**
+  - Parse Python files using `ast` module
+  - Detect dangerous patterns:
+    - `subprocess` calls with shell=True
+    - `eval()`, `exec()`, `compile()` usage
+    - `requests.post/get` with variable URLs
+    - `os.environ` access
+    - File operations with user-controlled paths
+    - Import of `ctypes`, `socket`, `pickle` (potentially dangerous)
+  - Track line numbers for all findings
+- **Test Criteria:**
+  - Unit tests with malicious Python samples
+  - Test with `bandit` to verify coverage overlap
+  - AST parsing error handling (malformed Python)
+- **Integration:** Called when skill bundles .py files
+
+**Task 2.2: Add Shell Script Analysis**
+- **Deliverable:** `analyzers/shell_analyzer.py`
+- **Purpose:** Basic shell script security analysis
+- **Requirements:**
+  - Pattern matching for dangerous commands:
+    - `eval`, `exec`, `source` with variables
+    - `curl | bash` patterns
+    - `rm -rf` with wildcards
+    - `chmod +s` (setuid)
+    - Backticks and `$()` with user input
+  - Integrate `shellcheck` if available (optional)
+- **Test Criteria:**
+  - Test with common malicious shell patterns
+  - Verify false positive rate on legitimate scripts
+- **Integration:** Called when skill bundles .sh files
+
+**Task 2.3: File Bundle Detection**
+- **Deliverable:** Update `main.py` with bundle scanning
+- **Purpose:** Detect and analyze bundled scripts in skills
+- **Requirements:**
+  - Detect skills that reference external files
+  - Scan bundled Python (.py), Shell (.sh), JavaScript (.js) files
+  - Aggregate findings across all bundled files
+  - Report file paths in findings
+- **Test Criteria:**
+  - Test with skills containing bundled scripts
+  - Verify recursive scanning of subdirectories
+- **Integration:** Called after initial skill.md analysis
+
+---
+
+#### Priority 3: Behavioral Dataflow Analysis
+
+**Task 3.1: Implement Simple Taint Tracking**
+- **Deliverable:** `analyzers/dataflow_analyzer.py`
+- **Purpose:** Track data flow from user input to dangerous sinks
+- **Requirements:**
+  - Identify taint sources: user input, environment variables, file reads
+  - Track taint propagation through assignments
+  - Detect tainted data reaching dangerous sinks:
+    - `subprocess` calls
+    - `eval()` functions
+    - File write operations
+    - Network requests
+  - Report full data flow path
+- **Test Criteria:**
+  - Unit tests with command injection samples
+  - Test path traversal detection
+  - Test SQL injection patterns
+- **Integration:** Part of PythonAnalyzer for enhanced detection
+
+---
+
+#### Priority 4: CI/CD Integration
+
+**Task 4.1: Add SARIF Output Format**
+- **Deliverable:** `output/sarif.py`
+- **Purpose:** Generate SARIF for GitHub Code Scanning integration
+- **Requirements:**
+  - Implement `to_sarif(findings: List[Finding]) -> dict` function
+  - Generate valid SARIF 2.1.0 format:
+    - `runs[0].tool.driver.name`: "skillcheck"
+    - `runs[0].results`: Array of findings with ruleId, level, message, locations
+    - Map severity: CRITICAL/HIGH → error, MEDIUM → warning, LOW → note
+  - Include physicalLocation with artifactLocation and region
+- **Test Criteria:**
+  - Validate SARIF against JSON schema
+  - Test upload to GitHub Code Scanning (manual)
+  - Verify correct line number mapping
+- **Integration:** Called when `--format=sarif` specified
+
+**Task 4.2: Create GitHub Actions Workflow**
+- **Deliverable:** `.github/workflows/skill-security.yml`
+- **Purpose:** Automated scanning on PR/commit
+- **Requirements:**
+  - Trigger on PRs to skills/** or *.md changes
+  - Setup Ollama with kimi-k2.5:cloud model
+  - Install skillcheck dependencies
+  - Run scan with SARIF output
+  - Upload SARIF to GitHub Code Scanning
+  - Optional: Fail on CRITICAL findings
+- **Test Criteria:**
+  - Test workflow on sample PR
+  - Verify SARIF upload succeeds
+  - Check annotations appear in PR
+- **Integration:** Stored in .github/workflows/ directory
+
+**Task 4.3: Add Pre-commit Hook Support**
+- **Deliverable:** `.pre-commit-hooks.yaml`
+- **Purpose:** Local scanning before commit
+- **Requirements:**
+  - Define hook in pre-commit format
+  - Support arguments for format, severity threshold
+  - Document installation instructions
+- **Test Criteria:**
+  - Test with pre-commit framework
+  - Verify hook blocks commit on critical findings
+- **Integration:** Repository root
+
+---
+
+#### Priority 5: Policy Engine
+
+**Task 5.1: Create Policy Configuration System**
+- **Deliverable:** `policies/` directory with YAML configs
+- **Purpose:** Customizable security policies
+- **Requirements:**
+  - Create `policies/strict.yaml`, `policies/balanced.yaml`, `policies/permissive.yaml`
+  - Define rule structure:
+    ```yaml
+    rules:
+      hidden_instructions:
+        severity: critical
+        action: fail
+      credential_exposure:
+        severity: critical
+        action: fail
+    ```
+  - Support `--policy <name>` CLI flag
+  - Load policy from YAML and apply to findings
+- **Test Criteria:**
+  - Unit tests for each policy preset
+  - Test policy loading and validation
+  - Verify different policies produce different exit codes
+- **Integration:** Called from main.py to filter findings
+
+**Task 5.2: Implement Policy Enforcement**
+- **Deliverable:** Update `main.py` with policy filtering
+- **Purpose:** Apply policy rules to analysis results
+- **Requirements:**
+  - Load policy based on CLI flag or default (balanced)
+  - Filter findings based on policy thresholds
+  - Override severity based on policy rules
+  - Apply action rules: fail, warn, ignore
+  - Generate policy compliance report
+- **Test Criteria:**
+  - Test strict policy fails on medium issues
+  - Test permissive policy passes on medium issues
+  - Verify exit codes respect policy actions
+- **Integration:** Applied before final formatting
+
+---
+
+#### Priority 6: Consensus Mode
+
+**Task 6.1: Implement LLM Consensus Mode**
+- **Deliverable:** Update `analyzer.py` with consensus support
+- **Purpose:** Run LLM multiple times to reduce false positives
+- **Requirements:**
+  - Add `--consensus-runs N` CLI flag (default: 1)
+  - Run LLM analyzer N times with same prompt
+  - Aggregate findings across runs
+  - Keep only findings appearing in majority (> N/2)
+  - Track voting per finding (description match)
+  - Report confidence based on consensus percentage
+- **Test Criteria:**
+  - Test with runs=3 on known malicious skill
+  - Verify consistent findings are kept
+  - Verify inconsistent findings are filtered
+  - Performance test: 3 runs should complete in < 3x single run
+- **Integration:** Called when --consensus-runs > 1
+
+---
+
+#### Priority 7: Prompt Improvements
+
+**Task 7.1: Update Security Analysis Prompts**
+- **Deliverable:** Update `prompt_builder.py`
+- **Purpose:** Incorporate Cisco threat taxonomy into prompts
+- **Requirements:**
+  - Include explicit threat codes (AI001-AI007) in prompts
+  - Add specific instructions:
+    - Check ONLY for defined categories
+    - Provide exact line numbers
+    - Quote exact evidence text
+    - Be conservative (report if unsure)
+  - Define risk scoring: Critical=10, High=7, Medium=4, Low=1
+  - Structure prompt with clear sections: Critical, High, Medium, Low
+- **Test Criteria:**
+  - Verify prompt includes all AI codes
+  - Test with sample malicious content
+  - Compare before/after detection accuracy
+- **Integration:** Used by LLM analyzer
+
+---
+
+#### Priority 8: Cross-Skill Analysis
+
+**Task 8.1: Implement Skill Similarity Detection**
+- **Deliverable:** `analyzers/skill_comparator.py`
+- **Purpose:** Detect copycat or similar skills
+- **Requirements:**
+  - Compare skill descriptions across multiple files
+  - Calculate similarity scores (cosine similarity or Jaccard)
+  - Flag skills with >90% description similarity
+  - Report potential copycat or template-based skills
+- **Test Criteria:**
+  - Unit tests with similar skill pairs
+  - Test with identical skills (100% match)
+  - Test with completely different skills (0% match)
+- **Integration:** Optional mode for batch scanning multiple skills
+
+---
+
+### Success Metrics
+
+1. **Detection Accuracy:**
+   - Reduce false positive rate by 50% through multi-engine consensus
+   - Detect 95% of known malicious patterns from ClawHavoc campaign
+
+2. **Performance:**
+   - Static analysis completes in < 200ms per file
+   - Full multi-engine scan completes in < 30 seconds
+
+3. **Coverage:**
+   - Support analysis of .md, .py, .sh, .js bundled files
+   - Generate valid SARIF for all findings
+   - Support strict/balanced/permissive policy presets
+
+4. **Integration:**
+   - GitHub Actions workflow runs successfully on PRs
+   - Pre-commit hook blocks commits with critical findings
+   - SARIF uploads correctly to GitHub Code Scanning
+
+---
+
+### Task Dependencies
+
+```
+Task 1.2 (Base Class)
+  ↓
+Task 1.1 (StaticAnalyzer) → Task 1.3 (Multi-Engine Integration)
+  ↓
+Task 7.1 (Prompt Updates) → Task 6.1 (Consensus Mode)
+  ↓
+Task 2.1 (PythonAnalyzer) → Task 3.1 (Dataflow Analysis)
+  ↓
+Task 2.2 (Shell Analyzer) → Task 2.3 (Bundle Detection)
+  ↓
+Task 4.1 (SARIF Output) → Task 4.2 (GitHub Actions)
+  ↓
+Task 4.1 (SARIF Output) → Task 4.3 (Pre-commit Hook)
+  ↓
+Task 5.1 (Policy Config) → Task 5.2 (Policy Enforcement)
+```
+
+---
+
+### Implementation Priority Order
+
+1. **Foundation (Week 1-2):** Tasks 1.1, 1.2, 1.3, 7.1
+2. **Script Analysis (Week 3-4):** Tasks 2.1, 2.2, 2.3, 3.1
+3. **CI/CD Integration (Week 5-6):** Tasks 4.1, 4.2, 4.3
+4. **Policy & Consensus (Week 7-8):** Tasks 5.1, 5.2, 6.1, 8.1
+
+---
+
 ## Future Enhancements
 
 1. **Configuration file** for custom URL lists and rules

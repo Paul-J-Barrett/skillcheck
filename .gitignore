@@ -8,3 +8,21 @@ wheels/
 
 # Virtual environments
 .venv
+
+# GeoLite2 Database (must be downloaded separately - see README.md)
+# These files are subject to MaxMind's license and must not be committed
+GeoLite2-*.mmdb
+*.mmdb
+
+# Data directories
+data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

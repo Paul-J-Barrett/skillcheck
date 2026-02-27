@@ -138,6 +138,69 @@ def read_skill_file(file_path: str) -> tuple[str | None, str | None]:
         return None, f"Error reading file: {str(e)}"
 
 
+def extract_and_output_translations(file_path: str, content: str, filename: str) -> int:
+    """Extract non-English content and output as JSON with translations.
+    
+    Args:
+        file_path: Path to the skill file
+        content: File content
+        filename: Name of the skill file
+        
+    Returns:
+        Exit code (always 0 for successful extraction)
+    """
+    import re
+    
+    log("Extracting non-English content...")
+    
+    # Find all non-English text blocks (Cyrillic, CJK, Arabic, etc.)
+    translations = []
+    
+    # Cyrillic text (Russian, etc.)
+    cyrillic_pattern = re.compile(r'([\u0400-\u04ff\u0500-\u052f\u2de0-\u2dff\ua640-\ua69f]+)', re.UNICODE)
+    for match in cyrillic_pattern.finditer(content):
+        original = match.group(1)
+        # Simple translation placeholder - in production this would use actual translation
+        translations.append({
+            "original": original,
+            "translated": f"[TRANSLATED FROM RUSSIAN: {original}]",
+            "language": "ru",
+            "line": content[:match.start()].count('\n') + 1
+        })
+    
+    # CJK text (Chinese, Japanese, Korean)
+    cjk_pattern = re.compile(r'([\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+)', re.UNICODE)
+    for match in cjk_pattern.finditer(content):
+        original = match.group(1)
+        translations.append({
+            "original": original,
+            "translated": f"[TRANSLATED FROM CJK: {original}]",
+            "language": "zh/jp/ko",
+            "line": content[:match.start()].count('\n') + 1
+        })
+    
+    # Arabic/Persian text
+    arabic_pattern = re.compile(r'([\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]+)', re.UNICODE)
+    for match in arabic_pattern.finditer(content):
+        original = match.group(1)
+        translations.append({
+            "original": original,
+            "translated": f"[TRANSLATED FROM ARABIC/PERSIAN: {original}]",
+            "language": "ar/fa",
+            "line": content[:match.start()].count('\n') + 1
+        })
+    
+    output = {
+        "file": filename,
+        "file_path": file_path,
+        "total_non_english_segments": len(translations),
+        "translations": translations
+    }
+    
+    print(json.dumps(output, indent=2, ensure_ascii=False))
+    return 0
+
+
 def parse_arguments() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
@@ -203,6 +266,18 @@ Examples:
         "--verbose",
         action="store_true",
         help="Show detailed progress indicators",
+    )
+
+    parser.add_argument(
+        "--force-pass",
+        action="store_true",
+        help="Always exit with code 0, even if issues are found (alerts user to run manually if needed)",
+    )
+
+    parser.add_argument(
+        "--translate",
+        action="store_true",
+        help="Extract non-English content and output as JSON with original/translated text (does not run security analysis)",
     )
 
     return parser.parse_args()
@@ -312,7 +387,12 @@ def main() -> int:
 
     log(f"Loaded {len(skill_content)} characters from {skill_filename}")
 
-    # Configure provider
+    # Handle --translate mode: extract and output non-English content only
+    if args.translate:
+        log("Running in translation extraction mode...", important=True)
+        return extract_and_output_translations(args.skill_file, skill_content, skill_filename)
+
+    # Configure provider before translation check
     if args.openai:
         provider = "openai"
         api_key, model, base_url = get_openai_config(args)
@@ -440,6 +520,29 @@ def main() -> int:
 
     # Return appropriate exit code
     exit_code = calculate_exit_code(parsed_data)
+    
+    # Handle --force-pass flag
+    if exit_code != 0 and args.force_pass:
+        log("⚠️  Issues detected, but --force-pass flag is set. Forcing exit code 0.", important=True)
+        log("⚠️  Alert: This skill file has the following issues that require manual review:", important=True)
+        
+        # List the specific reasons for failure
+        critical_checks = [c for c in parsed_data.get("checks", []) if c.get("severity") == "critical" and not c.get("passed", False)]
+        high_checks = [c for c in parsed_data.get("checks", []) if c.get("severity") == "high" and not c.get("passed", False)]
+        
+        if critical_checks:
+            log(f"   ❌ {len(critical_checks)} CRITICAL issue(s) detected:", important=True)
+            for check in critical_checks:
+                log(f"      - {check.get('category', 'Unknown')}: {check.get('description', 'No description')}", important=True)
+        
+        if high_checks:
+            log(f"   ⚠️  {len(high_checks)} HIGH severity issue(s) detected:", important=True)
+            for check in high_checks:
+                log(f"      - {check.get('category', 'Unknown')}: {check.get('description', 'No description')}", important=True)
+        
+        log("⚠️  To see full details, run without --force-pass flag.", important=True)
+        exit_code = 0
+    
     log(f"Exit code: {exit_code}", important=True)
 
     return exit_code

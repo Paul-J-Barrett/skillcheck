@@ -34,11 +34,59 @@ This tool performs comprehensive security analysis on AI skill files before inst
 cd skillcheck
 
 # Install dependencies
-uv sync
+pip install -e .
 
-# Or with pip
-pip install ollama colorama
+# Or with pip and optional features
+pip install -e ".[geolocation]"  # Include geoip2 for IP geolocation
+pip install -e ".[all]"         # Include all optional features
 ```
+
+### Optional: GeoLite2 IP Geolocation Database
+
+To enable IP geolocation features (identifying countries for IP addresses in URLs):
+
+1. **Register for a free MaxMind account:**
+   - Go to: https://www.maxmind.com/en/geolite2/signup
+   - Sign up for a free account
+   - Accept the GeoLite2 End User License Agreement
+
+2. **Generate a License Key:**
+   - Log in to: https://www.maxmind.com/en/accounts/current/license-key
+   - Create a new license key
+
+3. **Download the Database:**
+   - Go to: https://www.maxmind.com/en/accounts/current/geoip/downloads
+   - Download `GeoLite2-Country` (country-level data, ~5MB)
+   - Or download `GeoLite2-City` (city-level data, ~30MB)
+   - Choose the `.mmdb` binary format
+
+4. **Install the Database:**
+   ```bash
+   # Option 1: Place in project root (recommended for development)
+   cp ~/Downloads/GeoLite2-Country.mmdb /home/paul/source/pythonProjects/skillcheck/
+   
+   # Option 2: Create data directory
+   mkdir -p /home/paul/source/pythonProjects/skillcheck/data
+   cp ~/Downloads/GeoLite2-Country.mmdb /home/paul/source/pythonProjects/skillcheck/data/
+   
+   # Option 3: System-wide location
+   sudo mkdir -p /usr/share/GeoIP/
+   sudo cp ~/Downloads/GeoLite2-Country.mmdb /usr/share/GeoIP/
+   ```
+
+5. **Install Python Dependencies:**
+   ```bash
+   pip install geoip2
+   ```
+
+6. **Test the Setup:**
+   ```python
+   python -c "from ip_geolocation import lookup_ip_geolocation; print(lookup_ip_geolocation('8.8.8.8'))"
+   ```
+
+**Note:** The GeoLite2 database is not included in this repository (see `.gitignore`).
+It must be downloaded separately and is subject to MaxMind's license terms.
+Users must keep the database updated (max 30 days old per license agreement).
 
 ## Usage
 
